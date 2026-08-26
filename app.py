@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import requests
+import urllib3
+
+# SSL uyarılarını gizlemek için (verify=False kullanıldığında konsolu temiz tutar)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 1. Sayfa Yapılandırması
 st.set_page_config(
@@ -9,18 +13,19 @@ st.set_page_config(
     page_icon="🌾"
 )
 
-# 2. Canlı Meteoroloji Verisi Çekme Fonksiyonu (User-Agent Entegreli)
-@st.cache_data(ttl=1800)  # 30 dakikada bir veriyi yeniler
+# 2. Canlı Meteoroloji Verisi Çekme Fonksiyonu (SSL & Hata Yakalama Geliştirilmiş)
+@st.cache_data(ttl=900)  # 15 dakikada bir veriyi yeniler
 def get_live_weather(lat, lon):
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto"
     
-    # Render IP engeline takılmamak ve canlı veriyi çekmek için eklenen tarayıcı başlığı
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        # verify=False eklenerek Render Linux sunucularının SSL takılması engellenmiştir
+        response = requests.get(url, headers=headers, timeout=10, verify=False)
+        
         if response.status_code == 200:
             data = response.json()
             current = data.get("current", {})
@@ -28,13 +33,25 @@ def get_live_weather(lat, lon):
                 "sicaklik": current.get("temperature_2m", "--"),
                 "nem": current.get("relative_humidity_2m", "--"),
                 "ruzgar": current.get("wind_speed_10m", "--"),
-                "durum": "🟢 Canlı Veri Bağlantısı"
+                "durum": "🟢 Canlı API Verisi"
             }
+        else:
+            return {
+                "sicaklik": "--", 
+                "nem": "--", 
+                "ruzgar": "--", 
+                "durum": f"🔴 API Yanıt Vermedi (Kod: {response.status_code})"
+            }
+            
     except Exception as e:
-        pass
-        
-    # Sunucu veya API yanıt vermezse devreye girecek varsayılan veri
-    return {"sicaklik": 22.0, "nem": 60, "ruzgar": 5.0, "durum": "🟡 Geçici Veri (Yedek)"}
+        # Hata gizlenmez, doğrudan arayüze basılır
+        hata_mesaji = str(e)[:35]
+        return {
+            "sicaklik": "--", 
+            "nem": "--", 
+            "ruzgar": "--", 
+            "durum": f"🔴 Bağlantı Hatası: {hata_mesaji}"
+        }
 
 # 3. Bursa İlçeleri Koordinat ve Tarımsal Erken Uyarı Veri Seti
 @st.cache_data
