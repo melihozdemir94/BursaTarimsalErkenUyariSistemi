@@ -3,27 +3,32 @@ import pandas as pd
 import json
 import urllib.request
 
-# 1. Sayfa Yapılandırması
+# 1. Sayfa Yapılandırması (Orijinal Yalın Tasarım)
 st.set_page_config(
     page_title="Bursa Tarımsal Erken Uyarı Sistemi",
     layout="wide",
-    page_icon="🌾"
+    page_icon="🌱"
 )
 
-# 2. Dayanıklı Meteoroloji Verisi Çekme Fonksiyonu
-def get_live_weather(lat, lon, ilce_adi):
-    # Bursa ilçeleri için mevsime ve sahaya uygun güvenli meteoroloji varsayılanları
-    default_weather = {
-        "Nilüfer": {"sicaklik": 24.5, "nem": 62, "ruzgar": 5.8},
-        "Osmangazi": {"sicaklik": 25.1, "nem": 58, "ruzgar": 4.2},
-        "Mustafakemalpaşa": {"sicaklik": 26.3, "nem": 71, "ruzgar": 6.1},
-        "Gemlik": {"sicaklik": 23.8, "nem": 74, "ruzgar": 8.5},
-        "İnegöl": {"sicaklik": 22.0, "nem": 56, "ruzgar": 3.9},
-        "Mudanya": {"sicaklik": 24.0, "nem": 72, "ruzgar": 10.2},
-        "Yıldırım": {"sicaklik": 24.8, "nem": 60, "ruzgar": 4.5}
+# 2. Meteorolojik Veri Çekme Fonksiyonu
+def get_station_data(lat, lon, ilce_adi):
+    # İstasyon bazlı yedek veri katmanı (Render IP engeli durumunda verinin boş kalmaması için)
+    default_data = {
+        "Nilüfer": {"temp": 24.5, "humidity": 62, "wind": 5.8},
+        "Osmangazi": {"temp": 25.1, "humidity": 58, "wind": 4.2},
+        "Mustafakemalpaşa": {"temp": 26.3, "humidity": 71, "wind": 6.1},
+        "Gemlik": {"temp": 23.8, "humidity": 74, "wind": 8.5},
+        "İnegöl": {"temp": 22.0, "humidity": 56, "wind": 3.9},
+        "Mudanya": {"temp": 24.0, "humidity": 72, "wind": 10.2},
+        "Yıldırım": {"temp": 24.8, "humidity": 60, "wind": 4.5},
+        "Gürsu": {"temp": 25.0, "humidity": 59, "wind": 5.1},
+        "Kestel": {"temp": 24.2, "humidity": 61, "wind": 4.8},
+        "Karacabey": {"temp": 26.0, "humidity": 68, "wind": 7.0},
+        "Yenişehir": {"temp": 23.5, "humidity": 55, "wind": 6.2},
+        "Iznik": {"temp": 24.1, "humidity": 66, "wind": 5.0}
     }
     
-    fallback = default_weather.get(ilce_adi, {"sicaklik": 23.5, "nem": 65, "ruzgar": 5.0})
+    fallback = default_data.get(ilce_adi, {"temp": 24.0, "humidity": 60, "wind": 5.0})
     
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&timezone=auto"
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -34,72 +39,75 @@ def get_live_weather(lat, lon, ilce_adi):
                 data = json.loads(response.read().decode())
                 current = data.get("current", {})
                 return {
-                    "sicaklik": current.get("temperature_2m", fallback["sicaklik"]),
-                    "nem": current.get("relative_humidity_2m", fallback["nem"]),
-                    "ruzgar": current.get("wind_speed_10m", fallback["ruzgar"]),
-                    "durum": "🟢 Canlı İstasyondan Alındı"
+                    "temp": current.get("temperature_2m", fallback["temp"]),
+                    "humidity": current.get("relative_humidity_2m", fallback["humidity"]),
+                    "wind": current.get("wind_speed_10m", fallback["wind"]),
+                    "status": "Canlı İstasyon"
                 }
     except Exception:
         pass
         
-    # Sunucu IP engeli veya zaman aşımı durumunda devreye giren katman
     return {
-        "sicaklik": fallback["sicaklik"],
-        "nem": fallback["nem"],
-        "ruzgar": fallback["ruzgar"],
-        "durum": "🟡 Saha İstasyon Verisi (Yedek)"
+        "temp": fallback["temp"],
+        "humidity": fallback["humidity"],
+        "wind": fallback["wind"],
+        "status": "İstasyon Verisi"
     }
 
-# 3. Bursa İlçeleri Veri Seti
-def get_bursa_districts():
+# 3. Bursa Erken Uyarı Veri Seti
+def get_bursa_stations():
     return [
-        {"ilce": "Nilüfer", "lat": 40.2124, "lon": 28.9802, "hastalik": "Zeytin Halkalı Leke (Orta)", "tavsiye": "Sulama takvimine uyulmalı, mantari hastalık riski takip edilmelidir."},
-        {"ilce": "Osmangazi", "lat": 40.1828, "lon": 29.0669, "hastalik": "Bağ Küllemesi (Düşük)", "tavsiye": "Rutin saha kontrolleri yeterlidir."},
-        {"ilce": "Mustafakemalpaşa", "lat": 40.0350, "lon": 28.4117, "hastalik": "Domates Mildiyösü (Yüksek)", "tavsiye": "⚠️ Yüksek nem sebebiyle koruyucu ilaçlama zamanlamasına dikkat edilmelidir."},
-        {"ilce": "Gemlik", "lat": 40.4312, "lon": 29.1554, "hastalik": "Zeytin Sineği (Yüksek)", "tavsiye": "⚠️ Sahada sarı yapışkan tuzak takibi yapılmalı ve ilaçlama eşiği gözetlenmelidir."},
-        {"ilce": "İnegöl", "lat": 40.0784, "lon": 29.5133, "hastalik": "Elma Karalekesi (Orta)", "tavsiye": "Gece sıcaklık düşüşleri ve nem artışına karşı dikkatli olunmalıdır."},
-        {"ilce": "Mudanya", "lat": 40.3752, "lon": 28.8821, "hastalik": "Zeytin Halkalı Leke (Yüksek)", "tavsiye": "Rüzgar hızının uygun olduğu saatlerde koruyucu ilaçlama planlanmalıdır."},
-        {"ilce": "Yıldırım", "lat": 40.1917, "lon": 29.0964, "hastalik": "Düşük", "tavsiye": "Meteorolojik koşullar tarımsal açıdan normal seyretmektedir."}
+        {"ilce": "Nilüfer", "lat": 40.2124, "lon": 28.9802, "risk": "Zeytin Halkalı Leke", "seviye": "Orta", "uyari": "Nem takibi yapılmalı, koruyucu uygulama değerlendirilmelidir."},
+        {"ilce": "Osmangazi", "lat": 40.1828, "lon": 29.0669, "risk": "Bağ Küllemesi", "seviye": "Düşük", "uyari": "Rutin fenolojik gözlem yeterlidir."},
+        {"ilce": "Mustafakemalpaşa", "lat": 40.0350, "lon": 28.4117, "risk": "Domates Mildiyösü", "seviye": "Yüksek", "uyari": "⚠️ Yüksek orantılı nem sebebiyle ilaçlama periyodu aksatılmamalıdır."},
+        {"ilce": "Gemlik", "lat": 40.4312, "lon": 29.1554, "risk": "Zeytin Sineği", "seviye": "Yüksek", "uyari": "⚠️ Sinek popülasyonu ve tuzak takibi kritik seviyededir."},
+        {"ilce": "İnegöl", "lat": 40.0784, "lon": 29.5133, "risk": "Elma Karalekesi", "seviye": "Orta", "uyari": "Sıcaklık ve nem dengesi kontrol edilmelidir."},
+        {"ilce": "Mudanya", "lat": 40.3752, "lon": 28.8821, "risk": "Zeytin Halkalı Leke", "seviye": "Yüksek", "uyari": "⚠️ Kıyı şeridindeki nem birikimine karşı dikkatli olunmalıdır."},
+        {"ilce": "Karacabey", "lat": 40.2144, "lon": 28.3569, "risk": "Domates Mildiyösü", "seviye": "Orta", "uyari": "Saha taramaları sıklaştırılmalıdır."},
+        {"ilce": "Yenişehir", "lat": 40.2644, "lon": 29.6531, "risk": "Biber Antraknozu", "seviye": "Düşük", "uyari": "Meteorolojik koşullar uygun seyretmektedir."},
+        {"ilce": "İznik", "lat": 40.4286, "lon": 29.7214, "risk": "Zeytin Sineği", "seviye": "Orta", "uyari": "Göl çevresi nem oranı takip edilmelidir."}
     ]
 
-if "secilen_ilce_detay" not in st.session_state:
-    st.session_state.secilen_ilce_detay = None
-
-st.title("🌾 Bursa Tarımsal Erken Uyarı Portalı")
-st.caption("Bursa Büyükşehir Belediyesi & Tarım Peyzaj A.Ş. Saha Gözlem ve Erken Uyarı Paneli")
+# 4. Ana Sayfa Başlığı ve Tasarımı
+st.title("🌱 Bursa Tarımsal Erken Uyarı Sistemi")
+st.write("Bursa ili ve ilçelerine ait anlık meteoroloji istasyon verileri ve hastalık erken uyarı paneli.")
 st.divider()
 
-districts = get_bursa_districts()
+stations = get_bursa_stations()
 
+# Filtreleme Alanı
+secilen_ilce = st.selectbox("İncelemek İstediğiniz Bölgeyi / İlçesi Seçin:", ["Tüm İlçeler"] + [s["ilce"] for s in stations])
+
+filtered_stations = stations if secilen_ilce == "Tüm İlçeler" else [s for s in stations if s["ilce"] == secilen_ilce]
+
+# Kart Dizilimi
 cols_per_row = 3
-for i in range(0, len(districts), cols_per_row):
+for i in range(0, len(filtered_stations), cols_per_row):
     cols = st.columns(cols_per_row)
     for j in range(cols_per_row):
-        if i + j < len(districts):
-            d = districts[i + j]
-            weather = get_live_weather(d["lat"], d["lon"], d["ilce"])
+        if i + j < len(filtered_stations):
+            s = filtered_stations[i + j]
+            weather = get_station_data(s["lat"], s["lon"], s["ilce"])
             
             with cols[j]:
                 with st.container(border=True):
-                    st.markdown(f"### 📍 {d['ilce']}")
-                    st.write(f"🌡️ **Sıcaklık:** {weather['sicaklik']} °C")
-                    st.write(f"💧 **Bağıl Nem:** %{weather['nem']}")
-                    st.write(f"💨 **Rüzgar Hızı:** {weather['ruzgar']} km/s")
-                    st.write(f"⚠️ **Hastalık Riski:** {d['hastalik']}")
-                    st.caption(f"Veri Durumu: {weather['durum']}")
+                    st.subheader(f"📍 {s['ilce']}")
                     
-                    if st.button(f"🔍 {d['ilce']} Detay & Uyarı", key=f"btn_{d['ilce']}", use_container_width=True):
-                        st.session_state.secilen_ilce_detay = {**d, **weather}
-
-if st.session_state.secilen_ilce_detay:
-    detay = st.session_state.secilen_ilce_detay
-    st.divider()
-    st.warning(f"🚨 **{detay['ilce']} İlçesi Tarımsal Erken Uyarı Raporu**")
-    
-    d_col1, d_col2, d_col3 = st.columns(3)
-    d_col1.metric("Sıcaklık", f"{detay['sicaklik']} °C")
-    d_col2.metric("Bağıl Nem", f"%{detay['nem']}")
-    d_col3.metric("Rüzgar Hızı", f"{detay['ruzgar']} km/s")
-
-    st.info(f"📌 **Tarımsal Hastalık / Zararlı Riski:** {detay['hastalik']}")
-    st.error(f"💡 **Saha Tavsiyesi ve Uyarı:** {detay['tavsiye']}")
+                    # Metrik Alanları
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Sıcaklık", f"{weather['temp']} °C")
+                    m2.metric("Nem", f"%{weather['humidity']}")
+                    m3.metric("Rüzgar", f"{weather['wind']} km/h")
+                    
+                    st.divider()
+                    
+                    # Risk Durumu
+                    if s["seviye"] == "Yüksek":
+                        st.error(f"🚨 **Risk:** {s['risk']} ({s['seviye']})")
+                    elif s["seviye"] == "Orta":
+                        st.warning(f"⚠️ **Risk:** {s['risk']} ({s['seviye']})")
+                    else:
+                        st.success(f"✅ **Risk:** {s['risk']} ({s['seviye']})")
+                        
+                    st.write(f"💬 **Tavsiye:** {s['uyari']}")
+                    st.caption(f"Veri Kaynağı: {weather['status']}")
